@@ -1,0 +1,33 @@
+local current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+if [[ -z "$current_branch" ]]
+then
+  echo "Error: Not a git repository."
+  return 1
+fi
+echo "Fetching latest changes from origin/main..."
+git fetch origin main:main
+local missing_commits=$(git rev-list HEAD..main --count)
+if [[ "$missing_commits" -gt 0 ]]
+then
+  echo "Aborting: Your branch is behind 'main' by $missing_commits commit(s)."
+  echo "Please merge or rebase main into $current_branch before generating a test plan."
+  return 1
+fi
+local change_diff=$(git diff main...HEAD)
+if [[ -z "$change_diff" ]]
+then
+  echo "No changes detected between $current_branch and main."
+  return 0
+fi
+echo "Generating test plan for $current_branch..."
+claude -p "Analyze the following code changes and write a comprehensive unit testing plan in Markdown format.
+  Do not implement the tests or modify any files.
+  Focus on:
+  - Test cases (edge cases, success paths, failure modes)
+  - Required mocks or stubs
+  - Testing strategy/framework recommendations
+
+  Write the testing plan in markdown to ./test-plan.md
+
+  Changes: $change_diff" --allowedTools "Bash,Read,Edit,Write" --verbose
+echo "Success! Testing plan saved to testing-plan.md"
